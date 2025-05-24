@@ -17,11 +17,6 @@ whisper
 requests>=2.31.0
 aiohttp
 
-# Shipping APIs
-rgs-python-sdk
-aramex-python-sdk
-aymakan-python-sdk
-
 # Utils
 python-multipart>=0.0.5
 pydantic>=2.5.1
