@@ -92,7 +92,7 @@ class ManyChatAPI:
 class ManyChatWebhookHandler:
     def __init__(self, customer_manager, ai_engine):
         self.api_key = os.getenv('MANYCHAT_API_KEY')
-        self.manychat_api = ManyChatAPI(self.api_key)
+        self.manychat_api = ManyChatAPI()
         self.customer_manager = customer_manager
         self.ai_engine = ai_engine
     
