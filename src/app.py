@@ -11,6 +11,7 @@ from src.core.weaviate_schema import init_weaviate
 from src.integrations.manychat import ManyChatWebhookHandler
 from src.integrations.sheets_manager import GoogleSheetsManager
 from src.integrations.shipping_manager import ShippingManager
+from .api import webhook, health
 
 load_dotenv()
 
@@ -33,6 +34,9 @@ ai_engine = AIEngine()
 sheets_manager = GoogleSheetsManager()
 shipping_manager = ShippingManager()
 webhook_handler = ManyChatWebhookHandler(customer_manager, ai_engine)
+
+app.include_router(webhook.router)
+app.include_router(health.router)
 
 @app.get("/")
 def read_root():
