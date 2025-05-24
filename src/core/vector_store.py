@@ -5,11 +5,17 @@ from ..core.config import settings
 
 class VectorStore:
     def __init__(self):
-        self.client = weaviate.Client(
+        self._client = weaviate.Client(
             url=settings.WEAVIATE_URL,
             auth_client_secret=weaviate.AuthApiKey(api_key=settings.WEAVIATE_API_KEY),
         )
         self._create_schema()
+        
+    def __del__(self):
+        """Clean up resources when the object is destroyed."""
+        if hasattr(self, '_client') and self._client is not None:
+            self._client.close()
+            self._client = None
 
     def _create_schema(self):
         """Create schema for customer conversations"""
@@ -51,7 +57,7 @@ class VectorStore:
         }
         
         try:
-            self.client.schema.create_class(schema)
+            self._client.schema.create_class(schema)
         except weaviate.exceptions.UnexpectedStatusCodeException:
             # Schema might already exist
             pass
@@ -72,7 +78,7 @@ class VectorStore:
             "media_url": media_url
         }
         
-        result = self.client.data_object.create(
+        result = self._client.data_object.create(
             "CustomerMessage",
             properties
         )
@@ -83,7 +89,7 @@ class VectorStore:
                                      limit: int = 10) -> List[Dict]:
         """Get recent conversation context for a customer"""
         query = (
-            self.client.query
+            self._client.query
             .get("CustomerMessage", ["content", "timestamp", "message_type", "is_from_customer", "media_url"])
             .with_where({
                 "path": ["customer_id"],
@@ -103,7 +109,7 @@ class VectorStore:
                                         limit: int = 5) -> List[Dict]:
         """Search for similar conversations using semantic search"""
         result = (
-            self.client.query
+            self._client.query
             .get("CustomerMessage", ["content", "customer_id", "timestamp"])
             .with_near_text({"concepts": [query]})
             .with_limit(limit)
