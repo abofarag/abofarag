@@ -25,48 +25,53 @@ class VectorStore:
 
     def _create_schema(self):
         """Create schema for customer conversations"""
-        schema = {
-            "class": "CustomerMessage",
-            "vectorizer": "text2vec-contextionary",
-            "properties": [
-                {
-                    "name": "content",
-                    "dataType": ["text"],
-                    "description": "The message content",
-                },
-                {
-                    "name": "customer_id",
-                    "dataType": ["string"],
-                    "description": "Customer identifier",
-                },
-                {
-                    "name": "timestamp",
-                    "dataType": ["date"],
-                    "description": "When the message was sent",
-                },
-                {
-                    "name": "message_type",
-                    "dataType": ["string"],
-                    "description": "Type of message (text, image, voice)",
-                },
-                {
-                    "name": "is_from_customer",
-                    "dataType": ["boolean"],
-                    "description": "Whether message is from customer",
-                },
-                {
-                    "name": "media_url",
-                    "dataType": ["string"],
-                    "description": "URL for media content if any",
-                }
-            ],
-        }
-        
         try:
-            self._client.schema.create_class(schema)
-        except weaviate.exceptions.UnexpectedStatusCodeException:
-            # Schema might already exist
-            pass
+            self._connect()
+            schema = {
+                "class": "CustomerMessage",
+                "vectorizer": "text2vec-contextionary",
+                "properties": [
+                    {
+                        "name": "content",
+                        "dataType": ["text"],
+                        "description": "The message content",
+                    },
+                    {
+                        "name": "customer_id",
+                        "dataType": ["string"],
+                        "description": "Customer identifier",
+                    },
+                    {
+                        "name": "timestamp",
+                        "dataType": ["date"],
+                        "description": "When the message was sent",
+                    },
+                    {
+                        "name": "message_type",
+                        "dataType": ["string"],
+                        "description": "Type of message (text, image, voice)",
+                    },
+                    {
+                        "name": "is_from_customer",
+                        "dataType": ["boolean"],
+                        "description": "Whether message is from customer",
+                    },
+                    {
+                        "name": "media_url",
+                        "dataType": ["string"],
+                        "description": "URL for media content if any",
+                    }
+                ],
+            }
+            
+            try:
+                self._client.schema.create_class(schema)
+            except weaviate.exceptions.UnexpectedStatusCodeException:
+                # Schema might already exist
+                pass
+        finally:
+            if self._client:
+                self._client.close()
 
     async def save_message(self, 
                           customer_id: str, 
