@@ -1,0 +1,30 @@
+# Web Framework
+fastapi>=0.104.1
+uvicorn>=0.24.0
+python-dotenv>=1.0.0
+
+# Database
+weaviate-client>=3.25.2
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# AI & NLP
+openai>=1.0.0
+whisper
+
+# HTTP & API
+requests>=2.31.0
+aiohttp
+
+# Shipping APIs
+rgs-python-sdk
+aramex-python-sdk
+aymakan-python-sdk
+
+# Utils
+python-multipart>=0.0.5
+pydantic>=2.5.1
+pytz
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
