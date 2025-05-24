@@ -5,11 +5,17 @@ from ..core.config import settings
 
 class VectorStore:
     def __init__(self):
-        self._client = weaviate.Client(
-            url=settings.WEAVIATE_URL,
-            auth_client_secret=weaviate.AuthApiKey(api_key=settings.WEAVIATE_API_KEY),
-        )
+        self._client = None
+        self._connect()
         self._create_schema()
+        
+    def _connect(self):
+        """Establish connection to Weaviate"""
+        if self._client is None:
+            self._client = weaviate.Client(
+                url=settings.WEAVIATE_URL,
+                auth_client_secret=weaviate.AuthApiKey(api_key=settings.WEAVIATE_API_KEY),
+            )
         
     def __del__(self):
         """Clean up resources when the object is destroyed."""
@@ -69,51 +75,66 @@ class VectorStore:
                           message_type: str = "text",
                           media_url: Optional[str] = None) -> str:
         """Save a message to the vector store"""
-        properties = {
-            "content": content,
-            "customer_id": customer_id,
-            "timestamp": datetime.now().isoformat(),
-            "message_type": message_type,
-            "is_from_customer": is_from_customer,
-            "media_url": media_url
-        }
-        
-        result = self._client.data_object.create(
-            "CustomerMessage",
-            properties
-        )
-        return result.uuid
+        try:
+            self._connect()
+            properties = {
+                "content": content,
+                "customer_id": customer_id,
+                "timestamp": datetime.now().isoformat(),
+                "message_type": message_type,
+                "is_from_customer": is_from_customer,
+                "media_url": media_url
+            }
+            
+            result = self._client.data_object.create(
+                "CustomerMessage",
+                properties
+            )
+            return result.uuid
+        finally:
+            if self._client:
+                self._client.close()
 
     async def get_conversation_context(self, 
                                      customer_id: str, 
                                      limit: int = 10) -> List[Dict]:
         """Get recent conversation context for a customer"""
-        query = (
-            self._client.query
-            .get("CustomerMessage", ["content", "timestamp", "message_type", "is_from_customer", "media_url"])
-            .with_where({
-                "path": ["customer_id"],
-                "operator": "Equal",
-                "valueString": customer_id
-            })
-            .with_sort({"path": ["timestamp"], "order": "desc"})
-            .with_limit(limit)
-        )
-        
-        result = query.do()
-        messages = result.get('data', {}).get('Get', {}).get('CustomerMessage', [])
-        return messages
+        try:
+            self._connect()
+            query = (
+                self._client.query
+                .get("CustomerMessage", ["content", "timestamp", "message_type", "is_from_customer", "media_url"])
+                .with_where({
+                    "path": ["customer_id"],
+                    "operator": "Equal",
+                    "valueString": customer_id
+                })
+                .with_sort({"path": ["timestamp"], "order": "desc"})
+                .with_limit(limit)
+            )
+            
+            result = query.do()
+            messages = result.get('data', {}).get('Get', {}).get('CustomerMessage', [])
+            return messages
+        finally:
+            if self._client:
+                self._client.close()
 
     async def search_similar_conversations(self, 
                                         query: str, 
                                         limit: int = 5) -> List[Dict]:
         """Search for similar conversations using semantic search"""
-        result = (
-            self._client.query
-            .get("CustomerMessage", ["content", "customer_id", "timestamp"])
-            .with_near_text({"concepts": [query]})
-            .with_limit(limit)
-            .do()
-        )
-        
-        return result.get('data', {}).get('Get', {}).get('CustomerMessage', [])
+        try:
+            self._connect()
+            result = (
+                self._client.query
+                .get("CustomerMessage", ["content", "customer_id", "timestamp"])
+                .with_near_text({"concepts": [query]})
+                .with_limit(limit)
+                .do()
+            )
+            
+            return result.get('data', {}).get('Get', {}).get('CustomerMessage', [])
+        finally:
+            if self._client:
+                self._client.close()
