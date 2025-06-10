@@ -109,9 +109,10 @@ async def manychat_webhook(request: Request):
         
         print(f"[WEBHOOK] Returning final response to ManyChat: {ai_reply}")
         
-        # عودة الرد بصيغة ManyChat
+        # عودة الرد بصيغة متوافقة مع توقعات API
         return {
-            "gpt_reply": ai_reply,
+            "output": ai_reply,  # تغيير كلمة gpt_reply إلى output للتوافق مع واجهة API
+            "gpt_reply": ai_reply,  # الاحتفاظ بها للتوافق مع السابق
             "customFields": {
                 "userinput": user_input
             }
