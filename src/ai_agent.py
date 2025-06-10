@@ -42,49 +42,6 @@ class AIAgent:
 - إذا لم تجد معلومة، اطلب من العميل التوضيح"""
 
     async def process_message(self, user_input: str, contact_id: str) -> Dict[str, Any]:
-        # Search in knowledge base
-        knowledge = await self.sheets_manager.search_knowledge_base(user_input)
-        
-        # Get conversation history
-        conversation = self.memory.get_conversation(contact_id)
-        
-        # Build messages array
-        messages = [
-            {"role": "system", "content": self.system_message}
-        ] + conversation + [
-            {"role": "user", "content": f"سؤال العميل: {user_input}\n\nمعلومات من قاعدة البيانات:\n{knowledge}"}
-        ]
-
-        response = await openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=500
-        )
-
-        bot_response = response.choices[0].message.content
-
-        # Save to memory
-        self.memory.add_message(contact_id, "user", user_input)
-        self.memory.add_message(contact_id, "assistant", bot_response)
-
-        # Log interaction
-        await self.log_interaction(contact_id, user_input, bot_response)
-        
-        return {"output": bot_response}
-
-    async def log_interaction(self, contact_id: str, user_question: str, bot_answer: str):
-        dubai_tz = pytz.timezone('Asia/Dubai')
-        timestamp = datetime.now(dubai_tz).strftime('%d/%m/%Y %H:%M:%S')
-        
-        await self.sheets_manager.log_interaction(
-            timestamp=timestamp,
-            contact_id=contact_id,
-            user_question=user_question,
-            bot_answer=bot_answer
-        )
-
-    async def process_message(self, user_input: str, contact_id: str) -> Dict[str, Any]:
         print(f"[AIAgent] process_message called with user_input: {user_input}, contact_id: {contact_id}")
         
         # 1. أولاً نتحقق من الأسئلة المتعلقة بالسعر
