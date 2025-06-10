@@ -5,8 +5,21 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
-from telegram import KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
-from telegram.ext import Application, CallbackContext, CallbackQueryHandler, CommandHandler, ContextTypes, filters, MessageHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
+from telegram.constants import ParseMode
+import logging
+import os
+import asyncio
+import json
+from typing import Dict, List, Optional, Union, Tuple
+from datetime import datetime, timedelta
+import pytz
+import httpx
+from dotenv import load_dotenv
+from enum import Enum
+import csv
+from io import StringIO
 
 # --- CONFIGURATION ---
 # Load environment variables from .env file in the project root
@@ -137,6 +150,99 @@ async def switch_server_callback(update: Update, context: CallbackContext) -> No
         await query.edit_message_text(text="❌ Invalid server selected.")
 
 # --- MAIN FUNCTION ---
+def is_admin(user_id: int) -> bool:
+    """التحقق مما إذا كان المستخدم مشرفًا"""
+    return str(user_id) in users_db and users_db[str(user_id)]["role"] == UserRole.ADMIN.value
+
+def is_editor(user_id: int) -> bool:
+    """التحقق مما إذا كان المستخدم محررًا أو مشرفًا"""
+    user_id = str(user_id)
+    return user_id in users_db and users_db[user_id]["role"] in [UserRole.ADMIN.value, UserRole.EDITOR.value]
+
+def save_users_db():
+    """حفظ قاعدة بيانات المستخدمين إلى ملف"""
+    with open('users_db.json', 'w') as f:
+        json.dump(users_db, f)
+
+async def admin_required(update: Update, context: CallbackContext) -> bool:
+    """ديكوراتور للتحقق من صلاحيات المشرف"""
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔️ عذرًا، هذا الأمر متاح فقط للمشرفين.")
+        return False
+    return True
+
+async def editor_required(update: Update, context: CallbackContext) -> bool:
+    """ديكوراتور للتحقق من صلاحيات المحرر أو المشرف"""
+    if not is_editor(update.effective_user.id):
+        await update.message.reply_text("⛔️ عذرًا، هذا الأمر يتطلب صلاحيات محرر أو أعلى.")
+        return False
+    return True
+
+# --- أوامر ManyChat ---
+async def manychat_control(update: Update, context: CallbackContext) -> None:
+    """لوحة تحكم ManyChat الرئيسية"""
+    if not await admin_required(update, context):
+        return
+        
+    keyboard = [
+        [InlineKeyboardButton("📋 قائمة الصفحات", callback_data='mc_list_pages')],
+        [InlineKeyboardButton("➕ إضافة صفحة", callback_data='mc_add_page')],
+        [InlineKeyboardButton("⚙️ إعدادات الصفحة", callback_data='mc_page_settings')],
+        [InlineKeyboardButton("📊 إحصائيات", callback_data='mc_stats')],
+        [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data='main_menu')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("🛠 *لوحة تحكم ManyChat*\n\nاختر الإجراء المطلوب:", 
+                                  reply_markup=reply_markup,
+                                  parse_mode=ParseMode.MARKDOWN)
+
+# --- أوامر إدارة المستخدمين ---
+async def manage_users(update: Update, context: CallbackContext) -> None:
+    """إدارة المستخدمين"""
+    if not await admin_required(update, context):
+        return
+        
+    keyboard = [
+        [InlineKeyboardButton("👥 عرض المستخدمين", callback_data='users_list')],
+        [InlineKeyboardButton("➕ إضافة مستخدم", callback_data='users_add')],
+        [InlineKeyboardButton("✏️ تعديل صلاحيات", callback_data='users_edit')],
+        [InlineKeyboardButton("🗑 حذف مستخدم", callback_data='users_delete')],
+        [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data='main_menu')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👥 *إدارة المستخدمين*\n\nاختر الإجراء المطلوب:", 
+                                  reply_markup=reply_markup,
+                                  parse_mode=ParseMode.MARKDOWN)
+
+async def list_users(update: Update, context: CallbackContext) -> None:
+    """عرض قائمة المستخدمين"""
+    if not await admin_required(update, context):
+        return
+        
+    if not users_db:
+        await update.callback_query.message.reply_text("❌ لا يوجد مستخدمين مسجلين بعد.")
+        return
+        
+    users_list = "👥 *قائمة المستخدمين:*\n\n"
+    for user_id, user_data in users_db.items():
+        users_list += f"🆔 `{user_id}` - {user_data.get('name', 'بدون اسم')} - {user_data['role']}\n"
+    
+    await update.callback_query.message.reply_text(users_list, parse_mode=ParseMode.MARKDOWN)
+
+# --- معالجة الأزرار ---
+async def button_handler(update: Update, context: CallbackContext) -> None:
+    """معالجة الأزرار"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == 'mc_list_pages':
+        await list_manychat_pages(update, context)
+    elif query.data == 'users_list':
+        await list_users(update, context)
+    elif query.data == 'main_menu':
+        await start(update, context)
+    # يمكنك إضافة المزيد من معالجات الأزرار هنا
+
 def main():
     if not TELEGRAM_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set!")
@@ -149,11 +255,17 @@ def main():
     application.bot_data["active_server_name"] = DEFAULT_SERVER
     application.bot_data["active_server_url"] = SERVERS[DEFAULT_SERVER]
 
+    # إضافة معالجات الأوامر
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
     application.add_handler(CommandHandler("switch_server", switch_server_command))
+    application.add_handler(CommandHandler("manychat", manychat_control))
+    application.add_handler(CommandHandler("users", manage_users))
+    
+    # إضافة معالجات الأزرار
+    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(CallbackQueryHandler(switch_server_callback, pattern="^server_"))
 
     async def log_all_messages(update: Update, context: CallbackContext):
