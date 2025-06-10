@@ -137,8 +137,7 @@ async def switch_server_callback(update: Update, context: CallbackContext) -> No
         await query.edit_message_text(text="❌ Invalid server selected.")
 
 # --- MAIN FUNCTION ---
-async def main() -> None:
-    """Start the bot."""
+def main():
     if not TELEGRAM_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set!")
         return
@@ -147,45 +146,22 @@ async def main() -> None:
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Set default server on startup
     application.bot_data["active_server_name"] = DEFAULT_SERVER
     application.bot_data["active_server_url"] = SERVERS[DEFAULT_SERVER]
 
-    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
     application.add_handler(CommandHandler("switch_server", switch_server_command))
-    
-    # Add callback handler for the server switch
     application.add_handler(CallbackQueryHandler(switch_server_callback, pattern="^server_"))
 
-    # Diagnostic: log any received message
     async def log_all_messages(update: Update, context: CallbackContext):
         logger.info(f"Received message: {update.message.text} from user: {update.effective_user.id}")
     application.add_handler(MessageHandler(filters.ALL, log_all_messages))
 
-    # Start the Bot
-    logger.info("Telegram bot application built. Initializing and starting components...")
-    await application.initialize()
-    logger.info("Application initialized.")
-    await application.start()
-    logger.info("Application event handlers started.")
-
-    if application.updater:
-        logger.info("Starting updater polling...")
-        # Pass allowed_updates here if needed, similar to run_polling
-        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        logger.info("Updater polling started. Idling to keep bot alive...")
-        await application.updater.idle()  # This will run until interrupted (e.g., Ctrl+C or shutdown signal)
-    else:
-        logger.error("Updater not found in application. Cannot start polling. Idling application as a fallback.")
-        # Fallback if no updater is present, though Application.builder() usually creates one.
-        # This keeps the script alive but polling might not work as expected without an updater.
-        await application.idle()
-
-    logger.info("Telegram bot has stopped.") # This line will be reached when idle() finishes (e.g., on shutdown)
+    logger.info("Starting Telegram bot controller (sync main)...")
+    application.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
