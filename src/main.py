@@ -65,10 +65,6 @@ async def manychat_webhook(request: Request):
     )
     
     return response
-        return response
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get('/health')
 async def health_check():
