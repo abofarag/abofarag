@@ -62,9 +62,20 @@ async def manychat_webhook(request: Request):
         print(f"[WEBHOOK] Received data: {data}")
         
         # Extract user data from request
-        user_input = data.get("customFields", {}).get("userinput", "")
-        contact_id = data.get("subscriber_id", "")
-        first_name = data.get("first_name", "")
+        # Try to get data from the root level first, as observed in logs
+        user_input = data.get("userInput")
+        contact_id = data.get("contactId")
+        first_name = data.get("first_name", "") # first_name might still be at root or not present
+
+        # Fallback to old structure if new one fails (though new structure seems consistent now)
+        if user_input is None:
+            user_input = data.get("customFields", {}).get("userinput", "")
+        if contact_id is None:
+            contact_id = data.get("subscriber_id", "")
+
+        # Ensure contact_id is a string, even if None initially
+        contact_id = str(contact_id) if contact_id is not None else ""
+        user_input = str(user_input) if user_input is not None else ""
         
         print(f"[WEBHOOK] Processing message: '{user_input}' from {first_name} (ID: {contact_id})")
         
