@@ -107,15 +107,14 @@ async def manychat_webhook(request: Request):
         except Exception as e:
             print(f"[WEBHOOK] ERROR logging interaction: {str(e)}")
         
-        print(f"[WEBHOOK] Returning final response to ManyChat: {ai_reply}")
-        
-        # عودة الرد بصيغة متوافقة مع توقعات ManyChat
-        return {
+        response_payload = {
             "output": ai_reply,  # الرد النهائي للعميل
             "customFields": {
                 "userinput": user_input  # حفظ السؤال الأصلي
             }
         }
+        print(f"[WEBHOOK] Full JSON payload to ManyChat: {response_payload}")
+        return response_payload
     except Exception as e:
         print(f"[ERROR] Error in manychat-webhook: {str(e)}")
         return {"error": str(e)}
