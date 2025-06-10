@@ -73,7 +73,9 @@ async def manychat_webhook(request: Request):
         
         # 1. تعامل مع أسئلة السعر مباشرة
         price_keywords = ['سعر', 'كم', 'تكلفة', 'ريال']
+        print(f"[WEBHOOK] Raw user_input before price check: '{user_input}'")
         query_lower = user_input.lower()
+        print(f"[WEBHOOK] query_lower before price check: '{query_lower}'")
         
         if any(keyword in query_lower for keyword in price_keywords) and ('جاسترو' in query_lower or 'زيرو' in query_lower):
             # إجابة مباشرة عن سؤال السعر
