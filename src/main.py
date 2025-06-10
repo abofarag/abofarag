@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import os
 import json
+import httpx
+print("[DEBUG] httpx version:", httpx.__version__)
+
 from dotenv import load_dotenv
 from .ai_agent import AIAgent
 from .sheets_manager import GoogleSheetsManager
