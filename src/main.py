@@ -120,10 +120,16 @@ async def manychat_live_webhook(request: Request):
         print("[manychat-webhook] Passing message to ChatGPT...")
         response = await ai_agent.process_message(user_input, contact_id)
         print(f"[manychat-webhook] ChatGPT response: {response['output']}")
-        print("[manychat-webhook] Sending response to ManyChat...")
-        await manychat.send_message(subscriber_id=contact_id, message=response['output'])
-        print("[manychat-webhook] Done. Returning response.")
-        return response
+        
+        # إرجاع الرد بالضبط وفقًا لصيغة JSONPath المطلوبة في ManyChat
+        response_data = {
+            "gpt_reply": response['output'],    # JSONPath:gpt_reply
+            "custom_fields": {                  # Select Custom Field:userinput
+                "userinput": user_input
+            }
+        }
+        print(f"[manychat-webhook] Returning response to ManyChat: {response_data}")
+        return response_data
     except Exception as e:
         import traceback
         print("[ERROR] /manychat-webhook:", traceback.format_exc())
