@@ -94,10 +94,29 @@ async def health_check():
         }
 
 @app.post("/manychat-webhook")
-async def manychat_echo_webhook(request: Request):
+async def manychat_live_webhook(request: Request):
     try:
         data = await request.json()
-        return {"received": data}
+        print("[manychat-webhook] Received request:", data)
+        # دعم كلا الصيغتين
+        if "body" in data and isinstance(data["body"], dict):
+            body = data["body"]
+        else:
+            body = data
+        user_input = body.get("userInput")
+        contact_id = body.get("contactId")
+        print(f"[manychat-webhook] userInput: {user_input}, contactId: {contact_id}")
+        if not user_input or not contact_id:
+            print("[manychat-webhook] Missing userInput or contactId!")
+            return JSONResponse(status_code=422, content={"detail": "Missing userInput or contactId"})
+
+        print("[manychat-webhook] Passing message to ChatGPT...")
+        response = await ai_agent.process_message(user_input, contact_id)
+        print(f"[manychat-webhook] ChatGPT response: {response['output']}")
+        print("[manychat-webhook] Sending response to ManyChat...")
+        await manychat.send_message(subscriber_id=contact_id, message=response['output'])
+        print("[manychat-webhook] Done. Returning response.")
+        return response
     except Exception as e:
         import traceback
         print("[ERROR] /manychat-webhook:", traceback.format_exc())

@@ -85,13 +85,16 @@ class AIAgent:
         )
 
     async def process_message(self, user_input: str, contact_id: str) -> Dict[str, Any]:
+        print(f"[AIAgent] process_message called with user_input: {user_input}, contact_id: {contact_id}")
         # Search in knowledge base
         knowledge = await self.sheets_manager.search_knowledge_base(user_input)
+        print(f"[AIAgent] Knowledge base result: {knowledge}")
         
         messages = [
             {"role": "system", "content": self.system_message},
             {"role": "user", "content": f"العميل يقول: {user_input}\n\nمعلومات من قاعدة البيانات:\n{knowledge}"}
         ]
+        print(f"[AIAgent] Messages sent to OpenAI: {messages}")
 
         response = await openai.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -101,6 +104,7 @@ class AIAgent:
         )
 
         bot_response = response.choices[0].message.content
+        print(f"[AIAgent] ChatGPT response: {bot_response}")
 
         # Log interaction
         await self.log_interaction(contact_id, user_input, bot_response)
