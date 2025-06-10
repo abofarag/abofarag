@@ -17,9 +17,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize components
-with open('config/google_credentials.json') as f:
-    google_creds = json.load(f)
+# Initialize Google credentials (from file or env)
+google_creds_path = 'config/google_credentials.json'
+google_creds = None
+if os.path.exists(google_creds_path):
+    with open(google_creds_path) as f:
+        google_creds = json.load(f)
+else:
+    google_creds_env = os.getenv('GOOGLE_CREDENTIALS')
+    if google_creds_env:
+        google_creds = json.loads(google_creds_env)
+    else:
+        raise Exception("Google credentials not found in file or environment variable!")
 
 sheets_manager = GoogleSheetsManager(
     spreadsheet_id=config.SPREADSHEET_ID,
