@@ -100,7 +100,7 @@ async def health_check():
 async def manychat_live_webhook(request: Request):
     try:
         data = await request.json()
-        print("[manychat-webhook] Received request:", data)
+        print(f"[manychat-webhook] Received request: {data}")
         # دعم كلا الصيغتين
         if "body" in data and isinstance(data["body"], dict):
             body = data["body"]
