@@ -1,25 +1,57 @@
 import asyncio
 import logging
 import os
+import json
 from pathlib import Path
+import asyncio
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Dict, List, Optional, Union, Tuple
 
 import httpx
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, filters
+from telegram import (
+    Update, 
+    InlineKeyboardButton, 
+    InlineKeyboardMarkup, 
+    ReplyKeyboardMarkup, 
+    ReplyKeyboardRemove,
+    KeyboardButton
+)
+from telegram.ext import (
+    Application, 
+    CommandHandler, 
+    CallbackContext, 
+    CallbackQueryHandler, 
+    MessageHandler, 
+    filters
+)
 from telegram.constants import ParseMode
-import logging
-import os
-import asyncio
-import json
-from typing import Dict, List, Optional, Union, Tuple
-from datetime import datetime, timedelta
-import pytz
-import httpx
-from dotenv import load_dotenv
-from enum import Enum
-import csv
-from io import StringIO
+
+# تعريف أدوار المستخدمين
+class UserRole(Enum):
+    ADMIN = "admin"
+    EDITOR = "editor"
+    VIEWER = "viewer"
+
+# تحميل قاعدة بيانات المستخدمين
+try:
+    with open('users_db.json', 'r') as f:
+        users_db = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    users_db = {}
+    # إضافة المستخدمين المدرجين في المتغيرات البيئية كمسؤولين
+    admin_ids = os.getenv("ADMIN_USER_IDS", "").split(",")
+    for admin_id in admin_ids:
+        if admin_id.strip():
+            users_db[admin_id.strip()] = {
+                "name": f"Admin-{admin_id[:4]}",
+                "role": UserRole.ADMIN.value,
+                "joined_at": datetime.now().isoformat()
+            }
+    # حفظ قاعدة البيانات
+    with open('users_db.json', 'w') as f:
+        json.dump(users_db, f)
 
 # --- CONFIGURATION ---
 # Load environment variables from .env file in the project root
@@ -96,18 +128,53 @@ async def set_bot_mode(context: CallbackContext, mode: str) -> str:
 
 # --- COMMAND HANDLERS ---
 async def start(update: Update, context: CallbackContext) -> None:
-    """Sends a welcome message and keyboard."""
-    user_name = update.effective_user.first_name
-    keyboard = [
-        [KeyboardButton("/status")],
-        [KeyboardButton("/learn"), KeyboardButton("/reply")],
-        [KeyboardButton("/switch_server")]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        f"Hi {user_name}!\nWelcome to the AI Support Bot controller.",
-        reply_markup=reply_markup
-    )
+    """Sends a welcome message and keyboard"""
+    try:
+        user = update.effective_user
+        user_id = str(user.id)
+        user_name = user.first_name or "User"
+        
+        # Create keyboard with main commands
+        keyboard = [
+            [KeyboardButton("/status"), KeyboardButton("/switch_server")],
+            [KeyboardButton("/learn"), KeyboardButton("/reply")],
+            [KeyboardButton("/manychat"), KeyboardButton("/users")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        # Add user to database if not exists
+        if user_id not in users_db:
+            users_db[user_id] = {
+                "name": user_name,
+                "role": "viewer",  # Default role
+                "joined_at": datetime.now().isoformat()
+            }
+            save_users_db()
+        
+        # Send welcome message
+        welcome_text = (
+            f"👋 مرحباً {user_name}!\n"
+            "🤖 أنا بوت تحكم دعم AI Support Bot\n\n"
+            "🔹 /status - عرض حالة البوت\n"
+            "🔄 /switch_server - تبديل السيرفر\n"
+            "📚 /learn - وضع التعلم\n"
+            "💬 /reply - وضع الردود\n"
+            "⚙️ /manychat - إعدادات ManyChat\n"
+            "👥 /users - إدارة المستخدمين"
+        )
+        
+        await update.message.reply_text(
+            welcome_text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML
+        )
+        logger.info(f"User {user_id} ({user_name}) started the bot")
+        
+    except Exception as e:
+        logger.error(f"Error in start command: {e}")
+        await update.message.reply_text(
+            "⚠️ عذراً، حدث خطأ ما. يرجى المحاولة مرة أخرى لاحقاً."
+        )
 
 @admin_only
 async def status_command(update: Update, context: CallbackContext) -> None:
@@ -243,19 +310,32 @@ async def button_handler(update: Update, context: CallbackContext) -> None:
         await start(update, context)
     # يمكنك إضافة المزيد من معالجات الأزرار هنا
 
-def main():
+def error_handler(update: object, context: CallbackContext) -> None:
+    """Log Errors caused by Updates."""
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+    if update and isinstance(update, Update) and update.effective_message:
+        update.effective_message.reply_text('عذراً، حدث خطأ ما. يرجى المحاولة مرة أخرى لاحقاً.')
+
+def log_all_messages(update: Update, context: CallbackContext) -> None:
+    """Log all messages"""
+    logger.info(f"Message from {update.effective_user.id}: {update.message.text}")
+
+def main() -> None:
+    """Run the bot."""
+    print("Starting Telegram bot controller (sync main)...")
+    
     if not TELEGRAM_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set!")
         return
-    if not ADMIN_USER_IDS:
-        logger.error("ADMIN_USER_IDS environment variable not set! Bot will not respond to admin commands.")
 
+    # Create the Application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
+    # Set default server
     application.bot_data["active_server_name"] = DEFAULT_SERVER
     application.bot_data["active_server_url"] = SERVERS[DEFAULT_SERVER]
-
-    # إضافة معالجات الأوامر
+    
+    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
@@ -264,16 +344,19 @@ def main():
     application.add_handler(CommandHandler("manychat", manychat_control))
     application.add_handler(CommandHandler("users", manage_users))
     
-    # إضافة معالجات الأزرار
-    application.add_handler(CallbackQueryHandler(button_handler))
+    # Add callback query handlers
     application.add_handler(CallbackQueryHandler(switch_server_callback, pattern="^server_"))
-
-    async def log_all_messages(update: Update, context: CallbackContext):
-        logger.info(f"Received message: {update.message.text} from user: {update.effective_user.id}")
-    application.add_handler(MessageHandler(filters.ALL, log_all_messages))
-
-    logger.info("Starting Telegram bot controller (sync main)...")
-    application.run_polling()
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Log all messages
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, log_all_messages))
+    
+    # Log all errors
+    application.add_error_handler(error_handler)
+    
+    # Start the Bot
+    print("Starting polling...")
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
