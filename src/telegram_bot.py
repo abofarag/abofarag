@@ -246,11 +246,9 @@ async def editor_required(update: Update, context: CallbackContext) -> bool:
     return True
 
 # --- أوامر ManyChat ---
+@admin_required
 async def manychat_control(update: Update, context: CallbackContext) -> None:
     """لوحة تحكم ManyChat الرئيسية"""
-    if not await admin_required(update, context):
-        return
-        
     keyboard = [
         [InlineKeyboardButton("📋 قائمة الصفحات", callback_data='mc_list_pages')],
         [InlineKeyboardButton("➕ إضافة صفحة", callback_data='mc_add_page')],
@@ -259,27 +257,31 @@ async def manychat_control(update: Update, context: CallbackContext) -> None:
         [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🛠 *لوحة تحكم ManyChat*\n\nاختر الإجراء المطلوب:", 
-                                  reply_markup=reply_markup,
-                                  parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        "🛠️ <b>لوحة تحكم ManyChat</b>\n\n"
+        "اختر الإجراء المطلوب:",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML
+    )
 
 # --- أوامر إدارة المستخدمين ---
+@admin_required
 async def manage_users(update: Update, context: CallbackContext) -> None:
     """إدارة المستخدمين"""
-    if not await admin_required(update, context):
-        return
-        
     keyboard = [
-        [InlineKeyboardButton("👥 عرض المستخدمين", callback_data='users_list')],
-        [InlineKeyboardButton("➕ إضافة مستخدم", callback_data='users_add')],
-        [InlineKeyboardButton("✏️ تعديل صلاحيات", callback_data='users_edit')],
-        [InlineKeyboardButton("🗑 حذف مستخدم", callback_data='users_delete')],
+        [InlineKeyboardButton("👥 عرض المستخدمين", callback_data='list_users')],
+        [InlineKeyboardButton("➕ إضافة مستخدم", callback_data='add_user')],
+        [InlineKeyboardButton("✏️ تعديل صلاحيات", callback_data='edit_user')],
+        [InlineKeyboardButton("🗑️ حذف مستخدم", callback_data='delete_user')],
         [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👥 *إدارة المستخدمين*\n\nاختر الإجراء المطلوب:", 
-                                  reply_markup=reply_markup,
-                                  parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        "👥 <b>إدارة المستخدمين</b>\n\n"
+        "اختر الإجراء المطلوب:",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML
+    )
 
 async def list_users(update: Update, context: CallbackContext) -> None:
     """عرض قائمة المستخدمين"""
