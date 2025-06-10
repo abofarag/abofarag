@@ -1,41 +1,4 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-venv/
-ENV/
-
-# Environment Variables
+node_modules/
 .env
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Logs
-*.log
-
-# Local development
-*.sqlite3
 .DS_Store
+npm-debug.log*
