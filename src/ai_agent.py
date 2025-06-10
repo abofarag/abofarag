@@ -96,12 +96,30 @@ class AIAgent:
         ]
         print(f"[AIAgent] Messages sent to OpenAI: {messages}")
 
-        response = await openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=500
-        )
+        # إنشاء client OpenAI بطريقة بديلة دون استخدام proxies
+        try:
+            import httpx
+            # استخدام Client بدون proxies
+            http_client = httpx.AsyncClient()
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=self.openai_api_key, http_client=http_client)
+            
+            print(f"[AIAgent] Using custom httpx client without proxies: {httpx.__version__}")
+            response = await client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=500
+            )
+        except Exception as e:
+            print(f"[AIAgent] Error creating client: {str(e)}")
+            # الطريقة العادية كخطة بديلة
+            response = await openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=500
+            )
 
         bot_response = response.choices[0].message.content
         print(f"[AIAgent] ChatGPT response: {bot_response}")
