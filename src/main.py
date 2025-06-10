@@ -44,27 +44,33 @@ manychat = ManyChatAPI(api_key=config.MANYCHAT_API_KEY)
 
 @app.post("/instagram-bot")
 async def manychat_webhook(request: Request):
-    data = await request.json()
-    # دعم كلا الصيغتين
-    if "body" in data and isinstance(data["body"], dict):
-        body = data["body"]
-    else:
-        body = data
-    user_input = body.get("userInput")
-    contact_id = body.get("contactId")
-    if not user_input or not contact_id:
-        return JSONResponse(status_code=422, content={"detail": "Missing userInput or contactId"})
+    try:
+        data = await request.json()
+        # دعم كلا الصيغتين
+        if "body" in data and isinstance(data["body"], dict):
+            body = data["body"]
+        else:
+            body = data
+        user_input = body.get("userInput")
+        contact_id = body.get("contactId")
+        if not user_input or not contact_id:
+            return JSONResponse(status_code=422, content={"detail": "Missing userInput or contactId"})
 
-    # Process message with AI agent
-    response = await ai_agent.process_message(user_input, contact_id)
-    
-    # Send response back through ManyChat
-    await manychat.send_message(
-        subscriber_id=contact_id,
-        message=response['output']
-    )
-    
-    return response
+        # Process message with AI agent
+        response = await ai_agent.process_message(user_input, contact_id)
+        
+        # Send response back through ManyChat
+        await manychat.send_message(
+            subscriber_id=contact_id,
+            message=response['output']
+        )
+        
+        return response
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("[ERROR] /instagram-bot:", tb)
+        return JSONResponse(status_code=500, content={"detail": str(e), "trace": tb})
 
 @app.get('/health')
 async def health_check():
