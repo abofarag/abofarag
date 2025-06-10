@@ -42,31 +42,29 @@ ai_agent = AIAgent(
 
 manychat = ManyChatAPI(api_key=config.MANYCHAT_API_KEY)
 
-class WebhookRequest(BaseModel):
-    body: Dict[str, Any]
+@app.post("/instagram-bot")
+async def manychat_webhook(request: Request):
+    data = await request.json()
+    # دعم كلا الصيغتين
+    if "body" in data and isinstance(data["body"], dict):
+        body = data["body"]
+    else:
+        body = data
+    user_input = body.get("userInput")
+    contact_id = body.get("contactId")
+    if not user_input or not contact_id:
+        return JSONResponse(status_code=422, content={"detail": "Missing userInput or contactId"})
 
-@app.post(config.WEBHOOK_ENDPOINT)
-async def handle_webhook(request: WebhookRequest):
-    try:
-        # Extract data from webhook
-        user_input = request.body.get('userInput')
-        contact_id = request.body.get('contactId')
-        
-        if not user_input or not contact_id:
-            raise HTTPException(
-                status_code=400, 
-                detail='Missing required fields: userInput or contactId'
-            )
-        
-        # Process message with AI agent
-        response = await ai_agent.process_message(user_input, contact_id)
-        
-        # Send response back through ManyChat
-        await manychat.send_message(
-            subscriber_id=contact_id,
-            message=response['output']
-        )
-        
+    # Process message with AI agent
+    response = await ai_agent.process_message(user_input, contact_id)
+    
+    # Send response back through ManyChat
+    await manychat.send_message(
+        subscriber_id=contact_id,
+        message=response['output']
+    )
+    
+    return response
         return response
         
     except Exception as e:
