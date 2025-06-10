@@ -94,3 +94,24 @@ class GoogleSheetsManager:
         except Exception as e:
             print(f"Error logging interaction: {str(e)}")
             return False
+
+    async def add_knowledge(self, question: str, answer: str) -> bool:
+        """Add a new question and answer to the knowledge base."""
+        try:
+            # The first 4 columns are for logs, so we add empty values for them.
+            # The new question and answer will go into columns E and F.
+            values = [["", "", "", "", question, answer]]
+            
+            self.sheets.values().append(
+                spreadsheetId=self.spreadsheet_id,
+                range='Q&A!A:F',  # Specify the full range to append to
+                valueInputOption='RAW',
+                insertDataOption='INSERT_ROWS',
+                body={'values': values}
+            ).execute()
+            
+            print(f"Successfully added to knowledge base: Q: {question} | A: {answer}")
+            return True
+        except Exception as e:
+            print(f"Error adding to knowledge base: {str(e)}")
+            return False
