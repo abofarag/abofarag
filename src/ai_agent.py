@@ -55,7 +55,7 @@ class AIAgent:
             {"role": "user", "content": f"سؤال العميل: {user_input}\n\nمعلومات من قاعدة البيانات:\n{knowledge}"}
         ]
 
-        response = await openai.ChatCompletion.acreate(
+        response = await openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             temperature=0.7,
@@ -93,7 +93,7 @@ class AIAgent:
             {"role": "user", "content": f"العميل يقول: {user_input}\n\nمعلومات من قاعدة البيانات:\n{knowledge}"}
         ]
 
-        response = await openai.ChatCompletion.acreate(
+        response = await openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             temperature=0.7,
