@@ -93,6 +93,19 @@ async def health_check():
             'error': str(e)
         }
 
+@app.post("/manychat-webhook")
+async def manychat_echo_webhook(request: Request):
+    try:
+        data = await request.json()
+        return {"received": data}
+    except Exception as e:
+        import traceback
+        print("[ERROR] /manychat-webhook:", traceback.format_exc())
+        return JSONResponse(status_code=500, content={
+            "detail": str(e),
+            "trace": traceback.format_exc()
+        })
+
 # For Heroku deployment
 if __name__ == "__main__":
     import uvicorn
