@@ -50,6 +50,76 @@ ai_agent = AIAgent(
 
 manychat = ManyChatAPI(api_key=config.MANYCHAT_API_KEY)
 
+@app.post("/manychat-webhook")
+async def manychat_webhook(request: Request):
+    """Webhook API endpoint for ManyChat integration
+    IMPORTANT: تم حذف N8N تماماً من النظام
+    """
+    try:
+        data = await request.json()
+        print(f"[WEBHOOK] Received data: {data}")
+        
+        # Extract user data from request
+        user_input = data.get("customFields", {}).get("userinput", "")
+        contact_id = data.get("subscriber_id", "")
+        first_name = data.get("first_name", "")
+        
+        print(f"[WEBHOOK] Processing message: '{user_input}' from {first_name} (ID: {contact_id})")
+        
+        # Default empty reply in case of error
+        ai_reply = ""
+        
+        # 1. تعامل مع أسئلة السعر مباشرة
+        price_keywords = ['سعر', 'كم', 'تكلفة', 'ريال']
+        query_lower = user_input.lower()
+        
+        if any(keyword in query_lower for keyword in price_keywords) and ('جاسترو' in query_lower or 'زيرو' in query_lower):
+            # إجابة مباشرة عن سؤال السعر
+            ai_reply = "سعر منتج جاسترو زيرو هو 250 ريال."
+            print(f"[WEBHOOK] Price answer generated: {ai_reply}")
+        else:
+            # 2. البحث في قاعدة المعرفة
+            knowledge = await sheets_manager.search_knowledge_base(user_input)
+            
+            if knowledge and knowledge.startswith('ج:'):
+                # إجابة مباشرة من قاعدة المعرفة
+                ai_reply = knowledge.replace('ج: ', '')
+                print(f"[WEBHOOK] Knowledge base answer: {ai_reply}")
+            else:
+                # 3. استخدام ChatGPT كخيار أخير
+                response = await ai_agent.process_message(user_input, contact_id)
+                ai_reply = response.get("output", "")
+                print(f"[WEBHOOK] ChatGPT answer: {ai_reply}")
+        
+        # تسجيل التفاعل بشكل مباشر خارج AIAgent
+        dubai_tz = pytz.timezone('Asia/Dubai')
+        timestamp = datetime.now(dubai_tz).strftime('%d/%m/%Y %H:%M:%S')
+        
+        # محاولة تسجيل السؤال والجواب
+        try:
+            await sheets_manager.log_interaction(
+                timestamp=timestamp,
+                contact_id=contact_id,
+                user_question=user_input,
+                bot_answer=ai_reply
+            )
+            print("[WEBHOOK] Interaction logged successfully to Google Sheets")
+        except Exception as e:
+            print(f"[WEBHOOK] ERROR logging interaction: {str(e)}")
+        
+        print(f"[WEBHOOK] Returning final response to ManyChat: {ai_reply}")
+        
+        # عودة الرد بصيغة ManyChat
+        return {
+            "gpt_reply": ai_reply,
+            "customFields": {
+                "userinput": user_input
+            }
+        }
+    except Exception as e:
+        print(f"[ERROR] Error in manychat-webhook: {str(e)}")
+        return {"error": str(e)}
+
 @app.post("/instagram-bot")
 async def manychat_webhook(request: Request):
     try:
