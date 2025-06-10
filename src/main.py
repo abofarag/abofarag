@@ -1,10 +1,18 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Dict, Any
+import openai
+import os
+import pytz # Import pytz
 from datetime import datetime
-import pytz
-# Dummy comment to force git update
+import logging
+import json
+import asyncio # Added for bot task
+from contextlib import asynccontextmanager # Added for lifespan
+
+# Import the main function from your telegram_bot.py
+# Ensure telegram_bot.py is structured to be importable and its main() can be called
+from src.telegram_bot import main as run_telegram_bot_async # Alias to avoid name clash
 import os
 import json
 import subprocess
@@ -28,7 +36,28 @@ print("[DEBUG] httpx version:", httpx.__version__)
 
 load_dotenv()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start the Telegram bot as a background task
+    print("INFO:     Attempting to start Telegram bot as a background task...")
+    logger.info("Lifespan: Starting Telegram bot task...")
+    bot_task = asyncio.create_task(run_telegram_bot_async())
+    try:
+        yield
+    finally:
+        # Shutdown: Optionally, add logic to gracefully stop the bot_task if needed
+        logger.info("Lifespan: Shutting down Telegram bot task...")
+        if not bot_task.done():
+            bot_task.cancel()
+            try:
+                await bot_task
+            except asyncio.CancelledError:
+                logger.info("Lifespan: Telegram bot task cancelled.")
+            except Exception as e:
+                logger.error(f"Lifespan: Error during bot task shutdown: {e}")
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Instagram AI Support",
     description="AI-powered Instagram support bot using ManyChat",
     version="1.0.0"
