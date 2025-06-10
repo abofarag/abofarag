@@ -4,6 +4,10 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import os
 import json
+import subprocess
+print('[DEBUG] pip freeze:')
+print(subprocess.getoutput('pip freeze'))
+
 import httpx
 print("[DEBUG] httpx version:", httpx.__version__)
 
