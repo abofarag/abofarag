@@ -1,6 +1,7 @@
 import os
 import logging
 import httpx
+import asyncio
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -99,12 +100,24 @@ async def set_bot_mode(mode: str) -> str:
 
 # --- COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a welcome message."""
-    user_name = update.effective_user.first_name
-    await update.message.reply_text(
-        f"Hi {user_name}!\nWelcome to the AI Support Bot controller.",
-        reply_markup=reply_markup
-    )
+    """Sends a welcome message with added logging for debugging."""
+    if not update.effective_user:
+        logger.warning("[START CMD] Received /start command but could not identify user.")
+        return
+        
+    user_id = update.effective_user.id
+    logger.info(f"[START CMD] Received /start command from user_id: {user_id}")
+    try:
+        user_name = update.effective_user.first_name
+        message_text = f"Hi {user_name}!\nWelcome to the AI Support Bot controller."
+        await update.message.reply_text(
+            message_text,
+            reply_markup=reply_markup
+        )
+        logger.info(f"[START CMD] Successfully sent /start reply to user_id: {user_id}")
+    except Exception as e:
+        logger.error(f"[START CMD] Failed to send /start reply to user_id: {user_id}. Error: {e}", exc_info=True)
+
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gets and sends the current bot status."""
@@ -140,13 +153,15 @@ async def main() -> None:
 
     logger.info("Starting Telegram bot polling...")
     try:
-        # Using await with run_polling in an async context
         await application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
-        logger.error(f"Telegram bot polling failed: {e}")
+        # Added exc_info=True to get the full traceback for better debugging
+        logger.error(f"Telegram bot polling CRASHED with an exception: {e}", exc_info=True)
+    finally:
+        # This will run if the polling loop stops for any reason
+        logger.warning("Telegram bot polling has stopped.")
 
-# This part is for running the bot standalone, which is not needed when run from main.py
-# but it's good practice to keep it for testing.
+# This part is for running the bot standalone for testing.
 if __name__ == "__main__":
     logger.info("Running telegram_bot.py as a standalone script.")
     asyncio.run(main())
