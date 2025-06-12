@@ -4,7 +4,7 @@ import httpx
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, ApplicationBuilder
 
 # --- ENVIRONMENT VARIABLES & CONFIGURATION ---
 # Construct the path to the .env file in the project root (assuming src folder)
@@ -15,18 +15,15 @@ load_dotenv(dotenv_path=dotenv_path)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# Use a specific logger for this module
 logger = logging.getLogger(__name__)
 
 # Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
-# --- ADMIN CONFIGURATION (MODIFIED) ---
-# NOTE: It's highly recommended to use environment variables for security.
-# This code first tries to load admin IDs from the 'ADMIN_USER_IDS' environment variable.
-# If it's not found, it falls back to a hardcoded ID for easy setup.
-
+# --- ADMIN CONFIGURATION (FINAL FIX) ---
+# This logic robustly handles admin ID configuration.
+# It first tries the environment variable, then falls back to a hardcoded ID.
 ADMIN_USER_IDS_RAW = os.getenv("ADMIN_USER_IDS")
 ADMIN_IDS = set()
 
@@ -43,26 +40,19 @@ else:
     # --- الرقم الخاص بك ---
     # هذا هو الرقم الذي سيتم استخدامه كمسؤول إذا لم يتم العثور على متغير البيئة
     HARDCODED_ADMIN_ID = 1370845765
-    # --- --- ---
-
-    # Fallback to the hardcoded ID if the environment variable is not set
     logger.warning(f"WARNING: ADMIN_USER_IDS environment variable not set. Falling back to the hardcoded admin ID: {HARDCODED_ADMIN_ID}")
     ADMIN_IDS = {HARDCODED_ADMIN_ID}
 
 
 # --- ADMIN DECORATOR ---
 def admin_required(func):
-    """
-    Decorator that restricts the use of a command to admin users only.
-    """
+    """Decorator that restricts the use of a command to admin users only."""
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        # Check if the user's ID is in the list of admin IDs
-        if update.effective_user.id not in ADMIN_IDS:
-            logger.warning(f"Unauthorized access attempt by user_id: {update.effective_user.id}")
+        if not update.effective_user or update.effective_user.id not in ADMIN_IDS:
+            logger.warning(f"Unauthorized access attempt by user_id: {update.effective_user.id if update.effective_user else 'Unknown'}")
             await update.message.reply_text("❌ أنت غير مصرح لك باستخدام هذا الأمر.")
-            return # Stop further execution
-        # If authorized, execute the original command function
+            return
         return await func(update, context, *args, **kwargs)
     return wrapper
 
@@ -88,7 +78,7 @@ async def get_bot_status() -> str:
         logger.error(f"Error calling FastAPI /mode endpoint: {e}")
         return "❌ Could not connect to the main bot. Is it running?"
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred in get_bot_status: {e}")
         return "An unexpected error occurred."
 
 async def set_bot_mode(mode: str) -> str:
@@ -103,55 +93,60 @@ async def set_bot_mode(mode: str) -> str:
         logger.error(f"Error setting bot mode: {e}")
         return "❌ Could not change the bot mode. Is the main bot running?"
     except Exception as e:
-        logger.error(f"An unexpected error occurred while setting mode: {e}")
+        logger.error(f"An unexpected error occurred in set_bot_mode: {e}")
         return "An unexpected error occurred."
 
 
 # --- COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a welcome message when the command /start is issued."""
+    """Sends a welcome message."""
     user_name = update.effective_user.first_name
     await update.message.reply_text(
-        f"Hi {user_name}!\nWelcome to the AI Support Bot controller.\n\nUse the commands below to manage the bot's behavior.",
+        f"Hi {user_name}!\nWelcome to the AI Support Bot controller.",
         reply_markup=reply_markup
     )
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gets and sends the current bot status. Available to everyone."""
+    """Gets and sends the current bot status."""
     message = await get_bot_status()
     await update.message.reply_text(message, parse_mode='Markdown')
 
 @admin_required
 async def learn_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sets the bot to learning mode. Restricted to admins."""
+    """Sets the bot to learning mode."""
     message = await set_bot_mode('learning')
     await update.message.reply_text(message, parse_mode='Markdown')
 
 @admin_required
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sets the bot to reply mode. Restricted to admins."""
+    """Sets the bot to reply mode."""
     message = await set_bot_mode('reply')
     await update.message.reply_text(message, parse_mode='Markdown')
 
 
-# --- MAIN FUNCTION ---
-def main() -> None:
-    """Start the bot and set up handlers."""
+# --- MAIN ASYNC FUNCTION ---
+async def main() -> None:
+    """Start the bot."""
     if not TELEGRAM_TOKEN:
-        logger.error("FATAL: TELEGRAM_BOT_TOKEN environment variable not set!")
+        logger.error("FATAL: TELEGRAM_BOT_TOKEN environment variable not set! The bot cannot start.")
         return
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Register command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
 
-    # Start the Bot
-    logger.info("Starting Telegram bot...")
-    application.run_polling()
+    logger.info("Starting Telegram bot polling...")
+    try:
+        # Using await with run_polling in an async context
+        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Telegram bot polling failed: {e}")
 
+# This part is for running the bot standalone, which is not needed when run from main.py
+# but it's good practice to keep it for testing.
 if __name__ == "__main__":
-    main()
+    logger.info("Running telegram_bot.py as a standalone script.")
+    asyncio.run(main())
