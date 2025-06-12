@@ -11,26 +11,43 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
-# Load configuration from environment variables
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
-
-# Load Admin User IDs and convert them to a set of integers for efficient lookup
-ADMIN_USER_IDS_RAW = os.getenv("ADMIN_USER_IDS")
-if not ADMIN_USER_IDS_RAW:
-    # Log an error and exit if ADMIN_USER_IDS is not set, as it's critical for security
-    logging.error("FATAL: ADMIN_USER_IDS environment variable is not set.")
-    exit() # Exit the script if no admins are defined
-
-# Split the string by commas and convert each part to an integer
-ADMIN_IDS = {int(user_id.strip()) for user_id in ADMIN_USER_IDS_RAW.split(',')}
-
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 # Use a specific logger for this module
 logger = logging.getLogger(__name__)
+
+# Load configuration from environment variables
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
+
+# --- ADMIN CONFIGURATION (MODIFIED) ---
+# NOTE: It's highly recommended to use environment variables for security.
+# This code first tries to load admin IDs from the 'ADMIN_USER_IDS' environment variable.
+# If it's not found, it falls back to a hardcoded ID for easy setup.
+
+ADMIN_USER_IDS_RAW = os.getenv("ADMIN_USER_IDS")
+ADMIN_IDS = set()
+
+if ADMIN_USER_IDS_RAW:
+    # Use IDs from the environment variable if it is set
+    logger.info("Found ADMIN_USER_IDS environment variable. Using it for configuration.")
+    try:
+        ADMIN_IDS = {int(user_id.strip()) for user_id in ADMIN_USER_IDS_RAW.split(',')}
+        logger.info(f"Successfully loaded {len(ADMIN_IDS)} admin(s) from environment variable.")
+    except ValueError:
+        logger.error("FATAL: ADMIN_USER_IDS environment variable contains non-integer values. Please check it.")
+        exit()
+else:
+    # --- الرقم الخاص بك ---
+    # هذا هو الرقم الذي سيتم استخدامه كمسؤول إذا لم يتم العثور على متغير البيئة
+    HARDCODED_ADMIN_ID = 1370845765
+    # --- --- ---
+
+    # Fallback to the hardcoded ID if the environment variable is not set
+    logger.warning(f"WARNING: ADMIN_USER_IDS environment variable not set. Falling back to the hardcoded admin ID: {HARDCODED_ADMIN_ID}")
+    ADMIN_IDS = {HARDCODED_ADMIN_ID}
 
 
 # --- ADMIN DECORATOR ---
