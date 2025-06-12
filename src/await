@@ -14,46 +14,33 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # --- LOGGING SETUP (THE FIX IS HERE) ---
-# This section was missing, which caused the 'NameError: name 'logger' is not defined' crash.
-# It configures the logging system for the application.
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-
 # --- DOTENV & LOCAL IMPORTS ---
-# Construct the path to the .env file in the project root
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
-# Import local modules from the project structure
 from src.ai_agent import AIAgent
 from src.sheets_manager import GoogleSheetsManager
 from src.manychat import ManyChatAPI
 from src import config
-# Import the main function from telegram_bot.py, renaming it to avoid clashes
 from src.telegram_bot import main as run_telegram_bot_async
 
-# Initial debug prints
 logger.info('[DEBUG] pip freeze:\n' + subprocess.getoutput('pip freeze'))
 logger.info(f"[DEBUG] httpx version: {httpx.__version__}")
-
 
 # --- LIFESPAN MANAGEMENT ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handles application startup and shutdown events."""
     logger.info("Lifespan event: Application startup...")
     logger.info("Lifespan: Attempting to start Telegram bot as a background task...")
-    
-    # Create a background task for the Telegram bot
     bot_task = asyncio.create_task(run_telegram_bot_async())
-    
     try:
-        yield # The application runs here
+        yield
     finally:
-        # Shutdown logic
         logger.info("Lifespan: Shutting down Telegram bot task...")
         if not bot_task.done():
             bot_task.cancel()
@@ -76,9 +63,7 @@ app = FastAPI(
 class BotState(BaseModel):
     mode: str  # Should be 'reply' or 'learning'
 
-# Simple in-memory state. Resets on server restart.
 bot_state = BotState(mode='reply')
-
 
 # --- INITIALIZATION OF SERVICES ---
 logger.info("Initializing services (Google Sheets, AI Agent, ManyChat)...")
@@ -106,11 +91,9 @@ ai_agent = AIAgent(
 manychat = ManyChatAPI(api_key=config.MANYCHAT_API_KEY)
 logger.info("Services initialized successfully.")
 
-
 # --- WEBHOOK ENDPOINT ---
 @app.post("/manychat-webhook")
 async def manychat_webhook(request: Request):
-    """Main webhook to handle all incoming ManyChat requests."""
     try:
         data = await request.json()
         logger.info(f"[WEBHOOK] Received data: {json.dumps(data, indent=2)}")
@@ -181,12 +164,10 @@ async def manychat_webhook(request: Request):
 # --- HEALTH & MODE ENDPOINTS ---
 @app.get("/mode", response_model=BotState)
 async def get_mode():
-    """Gets the current operating mode of the bot."""
     return bot_state
 
 @app.post("/mode", response_model=BotState)
 async def set_mode(new_state: BotState):
-    """Sets the operating mode of the bot ('reply' or 'learning')."""
     if new_state.mode not in ['reply', 'learning']:
         raise HTTPException(status_code=400, detail="Invalid mode. Must be 'reply' or 'learning'.")
     global bot_state
