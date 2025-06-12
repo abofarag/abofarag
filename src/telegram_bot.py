@@ -131,7 +131,7 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     message = await set_bot_mode('reply')
     await update.message.reply_text(message, parse_mode='Markdown')
 
-# --- DEBUGGING HANDLER (THE FIX IS HERE) ---
+# --- DEBUGGING HANDLER ---
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Logs any incoming update as JSON for debugging purposes.
@@ -150,7 +150,6 @@ async def main() -> None:
     application = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
-        .stop_signals(None) # Prevents the bot from interfering with FastAPI's lifecycle
         .build()
     )
 
@@ -169,7 +168,10 @@ async def main() -> None:
         logger.info("Starting bot coroutine: application.run_polling()")
         await application.initialize()
         await application.start()
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # --- THE FIX IS HERE ---
+        # stop_signals=None is passed as an argument to run_polling
+        # to prevent the bot from handling OS signals.
+        await application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
     except (asyncio.CancelledError):
         logger.info("Bot coroutine was cancelled. Shutting down...")
     except Exception as e:
