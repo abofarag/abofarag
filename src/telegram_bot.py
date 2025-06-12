@@ -23,13 +23,10 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
 # --- ADMIN CONFIGURATION (FINAL FIX) ---
-# This logic robustly handles admin ID configuration.
-# It first tries the environment variable, then falls back to a hardcoded ID.
 ADMIN_USER_IDS_RAW = os.getenv("ADMIN_USER_IDS")
 ADMIN_IDS = set()
 
 if ADMIN_USER_IDS_RAW:
-    # Use IDs from the environment variable if it is set
     logger.info("Found ADMIN_USER_IDS environment variable. Using it for configuration.")
     try:
         ADMIN_IDS = {int(user_id.strip()) for user_id in ADMIN_USER_IDS_RAW.split(',')}
@@ -38,8 +35,6 @@ if ADMIN_USER_IDS_RAW:
         logger.error("FATAL: ADMIN_USER_IDS environment variable contains non-integer values. Please check it.")
         exit()
 else:
-    # --- الرقم الخاص بك ---
-    # هذا هو الرقم الذي سيتم استخدامه كمسؤول إذا لم يتم العثور على متغير البيئة
     HARDCODED_ADMIN_ID = 1370845765
     logger.warning(f"WARNING: ADMIN_USER_IDS environment variable not set. Falling back to the hardcoded admin ID: {HARDCODED_ADMIN_ID}")
     ADMIN_IDS = {HARDCODED_ADMIN_ID}
@@ -139,27 +134,43 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # --- MAIN ASYNC FUNCTION ---
 async def main() -> None:
-    """Start the bot."""
+    """Initializes and runs the bot application."""
     if not TELEGRAM_TOKEN:
         logger.error("FATAL: TELEGRAM_BOT_TOKEN environment variable not set! The bot cannot start.")
         return
 
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    # --- THE FIX IS HERE ---
+    # We set stop_signals=None to prevent the bot from handling OS signals (like SIGINT or SIGTERM).
+    # This is crucial when running the bot inside another framework like FastAPI,
+    # as it lets FastAPI manage the application lifecycle.
+    application = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .stop_signals(None) # This line prevents SystemExit.
+        .build()
+    )
 
+    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
 
-    logger.info("Starting Telegram bot polling...")
+    # Run the bot until the asyncio task is cancelled
     try:
+        logger.info("Starting bot coroutine: application.run_polling()")
+        await application.initialize()
+        await application.start()
         await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except (asyncio.CancelledError):
+        logger.info("Bot coroutine was cancelled. Shutting down...")
     except Exception as e:
-        # Added exc_info=True to get the full traceback for better debugging
-        logger.error(f"Telegram bot polling CRASHED with an exception: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred in the bot's polling loop: {e}", exc_info=True)
     finally:
-        # This will run if the polling loop stops for any reason
-        logger.warning("Telegram bot polling has stopped.")
+        if application.running:
+            await application.stop()
+            await application.shutdown()
+        logger.info("Bot coroutine has finished.")
 
 # This part is for running the bot standalone for testing.
 if __name__ == "__main__":
