@@ -5,7 +5,7 @@ import asyncio
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, ContextTypes, ApplicationBuilder
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ApplicationBuilder
 
 # --- ENVIRONMENT VARIABLES & CONFIGURATION ---
 # Construct the path to the .env file in the project root (assuming src folder)
@@ -131,6 +131,14 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     message = await set_bot_mode('reply')
     await update.message.reply_text(message, parse_mode='Markdown')
 
+# --- DEBUGGING HANDLER (THE FIX IS HERE) ---
+async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Logs any incoming update as JSON for debugging purposes.
+    This helps to confirm that the bot is receiving data from Telegram.
+    """
+    logger.info(f"[CATCH-ALL] Received an update: {update.to_json()}")
+
 
 # --- MAIN ASYNC FUNCTION ---
 async def main() -> None:
@@ -139,22 +147,22 @@ async def main() -> None:
         logger.error("FATAL: TELEGRAM_BOT_TOKEN environment variable not set! The bot cannot start.")
         return
 
-    # --- THE FIX IS HERE ---
-    # We set stop_signals=None to prevent the bot from handling OS signals (like SIGINT or SIGTERM).
-    # This is crucial when running the bot inside another framework like FastAPI,
-    # as it lets FastAPI manage the application lifecycle.
     application = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
-        .stop_signals(None) # This line prevents SystemExit.
+        .stop_signals(None) # Prevents the bot from interfering with FastAPI's lifecycle
         .build()
     )
 
-    # Add command handlers
+    # Add command handlers first (they have higher priority by default)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
+
+    # Add the catch-all message handler with a lower priority (using a group > 0)
+    # This ensures it only runs if no other handler has processed the update.
+    application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=1)
 
     # Run the bot until the asyncio task is cancelled
     try:
