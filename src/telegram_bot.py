@@ -8,21 +8,18 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ApplicationBuilder
 
 # --- ENVIRONMENT VARIABLES & CONFIGURATION ---
-# Construct the path to the .env file in the project root (assuming src folder)
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
-# Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Load configuration from environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://127.0.0.1:8000")
 
-# --- ADMIN CONFIGURATION (FINAL FIX) ---
+# --- ADMIN CONFIGURATION ---
 ADMIN_USER_IDS_RAW = os.getenv("ADMIN_USER_IDS")
 ADMIN_IDS = set()
 
@@ -70,12 +67,9 @@ async def get_bot_status() -> str:
             response.raise_for_status()
             mode = response.json().get("mode", "unknown")
             return f"🤖 Bot status: *{mode.upper()}*"
-    except httpx.RequestError as e:
-        logger.error(f"Error calling FastAPI /mode endpoint: {e}")
-        return "❌ Could not connect to the main bot. Is it running?"
     except Exception as e:
         logger.error(f"An unexpected error occurred in get_bot_status: {e}")
-        return "An unexpected error occurred."
+        return "An unexpected error occurred while getting status."
 
 async def set_bot_mode(mode: str) -> str:
     """Calls the FastAPI /mode endpoint to set the bot's mode."""
@@ -85,33 +79,22 @@ async def set_bot_mode(mode: str) -> str:
             response.raise_for_status()
             new_mode = response.json().get("mode", "unknown")
             return f"✅ Bot mode successfully set to *{new_mode.upper()}*"
-    except httpx.RequestError as e:
-        logger.error(f"Error setting bot mode: {e}")
-        return "❌ Could not change the bot mode. Is the main bot running?"
     except Exception as e:
         logger.error(f"An unexpected error occurred in set_bot_mode: {e}")
-        return "An unexpected error occurred."
+        return "An unexpected error occurred while setting mode."
 
 
 # --- COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a welcome message with added logging for debugging."""
-    if not update.effective_user:
-        logger.warning("[START CMD] Received /start command but could not identify user.")
-        return
-        
+    """Sends a welcome message."""
     user_id = update.effective_user.id
     logger.info(f"[START CMD] Received /start command from user_id: {user_id}")
     try:
         user_name = update.effective_user.first_name
-        message_text = f"Hi {user_name}!\nWelcome to the AI Support Bot controller."
-        await update.message.reply_text(
-            message_text,
-            reply_markup=reply_markup
-        )
+        await update.message.reply_text(f"Hi {user_name}!\nWelcome to the AI Support Bot controller.", reply_markup=reply_markup)
         logger.info(f"[START CMD] Successfully sent /start reply to user_id: {user_id}")
     except Exception as e:
-        logger.error(f"[START CMD] Failed to send /start reply to user_id: {user_id}. Error: {e}", exc_info=True)
+        logger.error(f"[START CMD] Failed to send /start reply. Error: {e}", exc_info=True)
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -131,58 +114,49 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     message = await set_bot_mode('reply')
     await update.message.reply_text(message, parse_mode='Markdown')
 
-# --- DEBUGGING HANDLER ---
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Logs any incoming update as JSON for debugging purposes.
-    This helps to confirm that the bot is receiving data from Telegram.
-    """
+    """Logs any incoming update as JSON for debugging purposes."""
     logger.info(f"[CATCH-ALL] Received an update: {update.to_json()}")
 
 
 # --- MAIN ASYNC FUNCTION ---
 async def main() -> None:
-    """Initializes and runs the bot application."""
+    """Initializes and runs the bot application using a non-blocking method."""
     if not TELEGRAM_TOKEN:
         logger.error("FATAL: TELEGRAM_BOT_TOKEN environment variable not set! The bot cannot start.")
         return
 
-    application = (
-        ApplicationBuilder()
-        .token(TELEGRAM_TOKEN)
-        .build()
-    )
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Add command handlers first (they have higher priority by default)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("learn", learn_command))
     application.add_handler(CommandHandler("reply", reply_command))
-
-    # Add the catch-all message handler with a lower priority (using a group > 0)
-    # This ensures it only runs if no other handler has processed the update.
     application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=1)
 
-    # Run the bot until the asyncio task is cancelled
+    # --- THE FIX IS HERE ---
+    # We use the `async with` context manager, which handles initialize(), start(), stop(), and shutdown().
+    # This is the recommended way to run the bot within a larger asyncio application (like FastAPI).
     try:
-        logger.info("Starting bot coroutine: application.run_polling()")
-        await application.initialize()
-        await application.start()
-        # --- THE FIX IS HERE ---
-        # stop_signals=None is passed as an argument to run_polling
-        # to prevent the bot from handling OS signals.
-        await application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+        async with application:
+            logger.info("Bot application started via async context manager.")
+            await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            logger.info("Bot is now polling for updates.")
+            # Keep the bot running in the background until the task is cancelled.
+            await asyncio.Future()
+            logger.info("Bot polling is being stopped.")
+            await application.updater.stop()
     except (asyncio.CancelledError):
-        logger.info("Bot coroutine was cancelled. Shutting down...")
+        logger.info("Bot task was cancelled, shutting down gracefully.")
     except Exception as e:
-        logger.error(f"An unexpected error occurred in the bot's polling loop: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred in the bot's main coroutine: {e}", exc_info=True)
     finally:
-        if application.running:
-            await application.stop()
-            await application.shutdown()
         logger.info("Bot coroutine has finished.")
 
 # This part is for running the bot standalone for testing.
 if __name__ == "__main__":
     logger.info("Running telegram_bot.py as a standalone script.")
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Script interrupted by user.")
